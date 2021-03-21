@@ -1,48 +1,49 @@
 use super::*;
+use crate as pallet_kitties;
 
 use std::cell::RefCell;
 use sp_core::H256;
 use frame_support::{
-    impl_outer_origin, impl_outer_event, impl_outer_dispatch, parameter_types, weights::Weight,
+    parameter_types,
+    weights::{Weight, constants::WEIGHT_PER_SECOND},
     assert_ok, assert_noop, error::BadOrigin, unsigned::ValidateUnsigned,
 };
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup}, testing::{Header, TestXt}, Perbill,
 };
 
-impl_outer_origin! {
-	pub enum Origin for Test where system = frame_system {}
-}
+type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
+type Block = frame_system::mocking::MockBlock<Test>;
 
-mod kitties {
-	// Re-export needed for `impl_outer_event!`.
-	pub use super::super::*;
-}
-
-impl_outer_event! {
-	pub enum Event for Test {
-        frame_system<T>,
-        pallet_balances<T>,
-		kitties<T>,
+frame_support::construct_runtime!(
+	pub enum Test where
+		Block = Block,
+		NodeBlock = Block,
+		UncheckedExtrinsic = UncheckedExtrinsic,
+	{
+        System: frame_system::{Module, Call, Config, Storage, Event<T>},
+        Balances: pallet_balances::{Module, Call, Storage, Config<T>, Event<T>},
+		KittiesModule: pallet_kitties::{Module, Call, Storage, Event<T>, Config, ValidateUnsigned},
+        NFT: orml_nft::{Module, Storage}
 	}
-}
+);
 
-impl_outer_dispatch! {
-	pub enum Call for Test where origin: Origin {
-		kitties::KittiesModule,
-	}
-}
+const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
-#[derive(Clone, Eq, PartialEq)]
-pub struct Test;
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
     pub const MaximumBlockWeight: Weight = 1024;
     pub const MaximumBlockLength: u32 = 2 * 1024;
     pub const AvailableBlockRatio: Perbill = Perbill::one();
+    /// We allow for 2 seconds of compute with a 6 second average block time.
+	pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights
+    ::with_sensible_defaults(2 * WEIGHT_PER_SECOND, NORMAL_DISPATCH_RATIO);
+    pub BlockLength: frame_system::limits::BlockLength = frame_system::limits::BlockLength
+		::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
+    pub const SS58Prefix: u8 = 42;
 }
 
-impl frame_system::Trait for Test {
+impl frame_system::Config for Test {
 	type BaseCallFilter = ();
 	type Origin = Origin;
 	type Call = Call;
@@ -55,25 +56,22 @@ impl frame_system::Trait for Test {
 	type Header = Header;
 	type Event = Event;
 	type BlockHashCount = BlockHashCount;
-	type MaximumBlockWeight = MaximumBlockWeight;
 	type DbWeight = ();
-	type BlockExecutionWeight = ();
-	type ExtrinsicBaseWeight = ();
-	type MaximumExtrinsicWeight = MaximumBlockWeight;
-	type MaximumBlockLength = MaximumBlockLength;
-	type AvailableBlockRatio = AvailableBlockRatio;
 	type Version = ();
-	type PalletInfo = ();
 	type AccountData = pallet_balances::AccountData<u64>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
+	type BlockWeights = BlockWeights;
+	type BlockLength = BlockLength;
+    type PalletInfo = PalletInfo;
+    type SS58Prefix = SS58Prefix;
 }
 
 parameter_types! {
 	pub const ExistentialDeposit: u64 = 1;
 }
-impl pallet_balances::Trait for Test {
+impl pallet_balances::Config for Test {
 	type MaxLocks = ();
 	type Balance = u64;
 	type Event = Event;
@@ -83,7 +81,7 @@ impl pallet_balances::Trait for Test {
 	type WeightInfo = ();
 }
 
-impl orml_nft::Trait for Test {
+impl orml_nft::Config for Test {
     type ClassId = u32;
 	type TokenId = u32;
 	type ClassData = ();
@@ -110,11 +108,11 @@ parameter_types! {
 	pub const DefaultDifficulty: u32 = 3;
 }
 
-impl Trait for Test {
+impl Config for Test {
     type Event = Event;
     type Randomness = MockRandom;
     type Currency = Balances;
-    type WeightInfo = ();
+    type WeightInfo = pallet_kitties::weights::SubstrateWeight<Test>;
     type DefaultDifficulty = DefaultDifficulty;
 }
 
@@ -129,11 +127,6 @@ where
 	type Extrinsic = Extrinsic;
 }
 
-type KittiesModule = Module<Test>;
-type System = frame_system::Module<Test>;
-type Balances = pallet_balances::Module<Test>;
-type NFT = orml_nft::Module<Test>;
-
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
@@ -142,7 +135,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 		balances: vec![(200, 500)],
     }.assimilate_storage(&mut t).unwrap();
 
-    GenesisConfig::default().assimilate_storage::<Test>(&mut t).unwrap();
+    pallet_kitties::GenesisConfig::default().assimilate_storage::<Test>(&mut t).unwrap();
 
     let mut t: sp_io::TestExternalities = t.into();
 
@@ -164,7 +157,7 @@ fn can_create() {
         assert_eq!(KittiesModule::kitties(&100, 0), Some(kitty.clone()));
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 0).unwrap().owner, 100);
 
-        assert_eq!(last_event(), Event::kitties(RawEvent::KittyCreated(100, 0, kitty)));
+        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyCreated(100, 0, kitty)));
     });
 }
 
@@ -194,7 +187,7 @@ fn can_breed() {
         assert_eq!(KittiesModule::kitties(&100, 2), Some(kitty.clone()));
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 2).unwrap().owner, 100);
 
-        assert_eq!(last_event(), Event::kitties(RawEvent::KittyBred(100, 2, kitty)));
+        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyBred(100, 2, kitty)));
     });
 }
 
@@ -211,7 +204,7 @@ fn can_transfer() {
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 0).unwrap().owner, 200);
         assert_eq!(KittyPrices::<Test>::contains_key(0), false);
 
-        assert_eq!(last_event(), Event::kitties(RawEvent::KittyTransferred(100, 200, 0)));
+        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyTransferred(100, 200, 0)));
     });
 }
 
@@ -222,7 +215,7 @@ fn handle_self_transfer() {
 
         System::reset_events();
 
-        assert_noop!(KittiesModule::transfer(Origin::signed(100), 100, 1), orml_nft::Error::<Test>::NoPermission);
+        assert_noop!(KittiesModule::transfer(Origin::signed(100), 100, 1), orml_nft::Error::<Test>::TokenNotFound);
 
         assert_ok!(KittiesModule::transfer(Origin::signed(100), 100, 0));
 
@@ -230,6 +223,9 @@ fn handle_self_transfer() {
 
         // no transfer event because no actual transfer is executed
         assert_eq!(System::events().len(), 0);
+
+        assert_ok!(KittiesModule::create(Origin::signed(101)));
+        assert_noop!(KittiesModule::transfer(Origin::signed(100), 100, 1), orml_nft::Error::<Test>::NoPermission);
     });
 }
 
@@ -242,14 +238,14 @@ fn can_set_price() {
 
         assert_ok!(KittiesModule::set_price(Origin::signed(100), 0, Some(10)));
 
-        assert_eq!(last_event(), Event::kitties(RawEvent::KittyPriceUpdated(100, 0, Some(10))));
+        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyPriceUpdated(100, 0, Some(10))));
 
         assert_eq!(KittiesModule::kitty_prices(0), Some(10));
 
         assert_ok!(KittiesModule::set_price(Origin::signed(100), 0, None));
         assert_eq!(KittyPrices::<Test>::contains_key(0), false);
 
-        assert_eq!(last_event(), Event::kitties(RawEvent::KittyPriceUpdated(100, 0, None)));
+        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyPriceUpdated(100, 0, None)));
     });
 }
 
@@ -277,7 +273,7 @@ fn can_buy() {
         assert_eq!(Balances::free_balance(100), 400);
         assert_eq!(Balances::free_balance(200), 100);
 
-        assert_eq!(last_event(), Event::kitties(RawEvent::KittySold(100, 200, 0, 400)));
+        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittySold(100, 200, 0, 400)));
     });
 }
 
@@ -308,7 +304,7 @@ fn can_auto_breed() {
         assert_eq!(KittiesModule::kitties(&100, 2), Some(kitty.clone()));
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 2).unwrap().owner, 100);
 
-        assert_eq!(last_event(), Event::kitties(RawEvent::KittyBred(100, 2, kitty)));
+        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyBred(100, 2, kitty)));
     });
 }
 

@@ -32,11 +32,7 @@ benchmark:
 
 .PHONY: benchmark-output
 benchmark-output:
-	cd pallets/kitties/src && cargo run --manifest-path ../../../node/Cargo.toml --features runtime-benchmarks -- benchmark --extrinsic '*' --pallet crate --output weights.rs
-
-.PHONY: benchmark-traits
-benchmark-traits:
-	cargo run --manifest-path node/Cargo.toml --features runtime-benchmarks -- benchmark --extrinsic '*' --pallet pallet_kitties --weight-trait --output
+	cd runtime/src && cargo run --manifest-path ../../node/Cargo.toml --features runtime-benchmarks -- benchmark --extrinsic '*' --pallet pallet_kitties --template ../../frame-weight-template.hbs --output ../../pallets/kitties/src/weights.rs
 
 .PHONY: test-benchmark
 test-benchmark:

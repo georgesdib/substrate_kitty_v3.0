@@ -3,8 +3,7 @@
 use codec::{Encode, Decode};
 use frame_support::{
 	decl_module, decl_storage, decl_event, decl_error, ensure, StorageValue,
-	traits::{Randomness, Currency, ExistenceRequirement, Get}, RuntimeDebug, dispatch::DispatchResult,
-	weights::Weight,
+	traits::{Randomness, Currency, ExistenceRequirement, Get}, RuntimeDebug, dispatch::DispatchResult
 };
 use sp_io::hashing::blake2_128;
 use frame_system::{ensure_signed, ensure_none, offchain::{SendTransactionTypes, SubmitTransaction}};
@@ -18,6 +17,7 @@ use sp_runtime::{
 };
 use orml_utilities::with_transaction_result;
 use orml_nft::Module as NftModule;
+pub use weights::WeightInfo;
 
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
@@ -46,14 +46,6 @@ impl Kitty {
 			KittyGender::Female
 		}
 	}
-}
-
-pub trait WeightInfo {
-	fn create() -> Weight;
-	fn breed() -> Weight;
-	fn transfer() -> Weight;
-	fn set_price() -> Weight;
-	fn buy() -> Weight;
 }
 
 pub trait Config: orml_nft::Config<TokenData = Kitty, ClassData = ()> + SendTransactionTypes<Call<Self>> {
