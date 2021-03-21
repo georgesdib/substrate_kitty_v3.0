@@ -1,19 +1,3 @@
-# Assignment Seven
-
-1. Implement a difficulty adjustment algorithm for auto_breed
-2. Design:
-    - Storages
-        - KittyDifficultyMultiplier: KittyIndex => u32
-    - Methods
-        - fn validate_solution
-            - multiplier = kitty_difficulty_multiplier(kitty_id_1) + kitty_difficulty_multiplier(kitty_id_2) + 1
-            - difficulty = multiplier * DefaultDifficulty
-        - fn auto_breed
-            - Increase difficulty multiplier by one for both parents
-3. Push all the changes to master
-
----
-
 # Substrate Node Template
 
 A fresh FRAME-based [Substrate](https://www.substrate.io/) node, ready for hacking :rocket:
