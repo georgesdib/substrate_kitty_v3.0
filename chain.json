@@ -1,0 +1,12 @@
+{
+  "KittyIndexOf": "u32",
+  "KittyIndex": "u32",
+  "ClassId": "u32",
+  "Kitty": "[u8; 16]",
+  "KittyGender": {
+    "_enum": [
+      "Male",
+      "Female"
+    ]
+  }
+}
