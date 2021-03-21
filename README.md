@@ -1,30 +1,53 @@
+# Assignment Seven
+
+1. Implement a difficulty adjustment algorithm for auto_breed
+2. Design:
+    - Storages
+        - KittyDifficultyMultiplier: KittyIndex => u32
+    - Methods
+        - fn validate_solution
+            - multiplier = kitty_difficulty_multiplier(kitty_id_1) + kitty_difficulty_multiplier(kitty_id_2) + 1
+            - difficulty = multiplier * DefaultDifficulty
+        - fn auto_breed
+            - Increase difficulty multiplier by one for both parents
+3. Push all the changes to master
+
+---
+
 # Substrate Node Template
 
 A fresh FRAME-based [Substrate](https://www.substrate.io/) node, ready for hacking :rocket:
 
 ## Getting Started
 
-Follow these steps to get started with the Node Template :hammer_and_wrench:
+This project contains some configuration files to help get started :hammer_and_wrench:
 
 ### Rust Setup
 
-First, complete the [basic Rust setup instructions](./doc/rust-setup.md).
+Follow the [Rust setup instructions](./doc/rust-setup.md) before using the included Makefile to
+build the Node Template.
 
-### Run
+### Makefile
 
-Use Rust's native `cargo` command to build and launch the template node:
+This project uses a [Makefile](Makefile) to document helpful commands and make it easier to execute
+them. Get started by running these [`make`](https://www.gnu.org/software/make/manual/make.html)
+targets:
 
-```sh
-cargo run --release -- --dev --tmp
-```
+1. `make init` - Run the [init script](scripts/init.sh) to configure the Rust toolchain for
+   [WebAssembly compilation](https://substrate.dev/docs/en/knowledgebase/getting-started/#webassembly-compilation).
+1. `make run` - Build and launch this project in development mode.
+
+The init script and Makefile both specify the version of the
+[Rust nightly compiler](https://substrate.dev/docs/en/knowledgebase/getting-started/#rust-nightly-toolchain)
+that this project depends on.
 
 ### Build
 
-The `cargo run` command will perform an initial build. Use the following command to build the node
+The `make run` command will perform an initial build. Use the following command to build the node
 without launching it:
 
 ```sh
-cargo build --release
+make build
 ```
 
 ### Embedded Docs
@@ -38,9 +61,8 @@ subcommands:
 
 ## Run
 
-The provided `cargo run` command will launch a temporary node and its state will be discarded after
-you terminate the process. After the project has been built, there are other ways to launch the
-node.
+The `make run` command will launch a temporary node and its state will be discarded after you
+terminate the process. After the project has been built, there are other ways to launch the node.
 
 ### Single-Node Development Chain
 
@@ -131,7 +153,7 @@ Review the [FRAME runtime implementation](./runtime/src/lib.rs) included in this
 the following:
 
 -   This file configures several pallets to include in the runtime. Each pallet configuration is
-    defined by a code block that begins with `impl $PALLET_NAME::Config for Runtime`.
+    defined by a code block that begins with `impl $PALLET_NAME::Trait for Runtime`.
 -   The pallets are composed into a single runtime by way of the
     [`construct_runtime!`](https://crates.parity.io/frame_support/macro.construct_runtime.html)
     macro, which is part of the core
@@ -155,8 +177,8 @@ A FRAME pallet is compromised of a number of blockchain primitives:
 -   Events: Substrate uses [events](https://substrate.dev/docs/en/knowledgebase/runtime/events) to
     notify users of important changes in the runtime.
 -   Errors: When a dispatchable fails, it returns an error.
--   Config: The `Config` configuration interface is used to define the types and parameters upon
-    which a FRAME pallet depends.
+-   Trait: The `Trait` configuration interface is used to define the types and parameters upon which
+    a FRAME pallet depends.
 
 ### Run in Docker
 
