@@ -157,7 +157,7 @@ fn can_create() {
         assert_eq!(KittiesModule::kitties(&100, 0), Some(kitty.clone()));
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 0).unwrap().owner, 100);
 
-        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyCreated(100, 0, kitty)));
+        assert_eq!(last_event(), Event::pallet_kitties(pallet_kitties::Event::KittyCreated(100, 0, kitty)));
     });
 }
 
@@ -187,7 +187,7 @@ fn can_breed() {
         assert_eq!(KittiesModule::kitties(&100, 2), Some(kitty.clone()));
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 2).unwrap().owner, 100);
 
-        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyBred(100, 2, kitty)));
+        assert_eq!(last_event(), Event::pallet_kitties(pallet_kitties::Event::KittyBred(100, 2, kitty)));
     });
 }
 
@@ -204,7 +204,7 @@ fn can_transfer() {
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 0).unwrap().owner, 200);
         assert_eq!(KittyPrices::<Test>::contains_key(0), false);
 
-        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyTransferred(100, 200, 0)));
+        assert_eq!(last_event(), Event::pallet_kitties(pallet_kitties::Event::KittyTransferred(100, 200, 0)));
     });
 }
 
@@ -238,14 +238,14 @@ fn can_set_price() {
 
         assert_ok!(KittiesModule::set_price(Origin::signed(100), 0, Some(10)));
 
-        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyPriceUpdated(100, 0, Some(10))));
+        assert_eq!(last_event(), Event::pallet_kitties(pallet_kitties::Event::KittyPriceUpdated(100, 0, Some(10))));
 
-        assert_eq!(KittiesModule::kitty_prices(0), Some(10));
+        assert_eq!(KittiesModule::kitty_prices(0), 10);
 
         assert_ok!(KittiesModule::set_price(Origin::signed(100), 0, None));
         assert_eq!(KittyPrices::<Test>::contains_key(0), false);
 
-        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyPriceUpdated(100, 0, None)));
+        assert_eq!(last_event(), Event::pallet_kitties(pallet_kitties::Event::KittyPriceUpdated(100, 0, None)));
     });
 }
 
@@ -273,7 +273,7 @@ fn can_buy() {
         assert_eq!(Balances::free_balance(100), 400);
         assert_eq!(Balances::free_balance(200), 100);
 
-        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittySold(100, 200, 0, 400)));
+        assert_eq!(last_event(), Event::pallet_kitties(pallet_kitties::Event::KittySold(100, 200, 0, 400)));
     });
 }
 
@@ -304,7 +304,7 @@ fn can_auto_breed() {
         assert_eq!(KittiesModule::kitties(&100, 2), Some(kitty.clone()));
         assert_eq!(NFT::tokens(KittiesModule::class_id(), 2).unwrap().owner, 100);
 
-        assert_eq!(last_event(), Event::pallet_kitties(RawEvent::KittyBred(100, 2, kitty)));
+        assert_eq!(last_event(), Event::pallet_kitties(pallet_kitties::Event::KittyBred(100, 2, kitty)));
     });
 }
 
@@ -340,7 +340,7 @@ fn can_validate_unsigned() {
         assert_eq!(KittiesModule::auto_breed_nonce(), 2);
 
         // Now bring nonce back to 1, then auto breed to increment difficulty, and then try to replay the same transaction and it would fail this time
-        AutoBreedNonce::mutate(|nonce| *nonce = 1);
+        AutoBreedNonce::<Test>::mutate(|nonce| *nonce = 1);
         assert_ok!(KittiesModule::create(Origin::signed(100)));
         assert_ok!(KittiesModule::create(Origin::signed(101)));
         assert_ok!(KittiesModule::auto_breed(Origin::none(), 0, 1, 0, 0));

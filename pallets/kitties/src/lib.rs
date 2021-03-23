@@ -1,12 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use codec::{Encode, Decode};
-use frame_support::{
-	decl_module, decl_storage, decl_event, decl_error, ensure, StorageValue,
-	traits::{Randomness, Currency, ExistenceRequirement, Get}, RuntimeDebug, dispatch::DispatchResult
+use frame_support::{ensure, traits::{Randomness, Currency, ExistenceRequirement, Get}, RuntimeDebug, dispatch::DispatchResult
 };
 use sp_io::hashing::blake2_128;
-use frame_system::{ensure_signed, ensure_none, offchain::{SendTransactionTypes, SubmitTransaction}};
+use frame_system::offchain::{SendTransactionTypes, SubmitTransaction};
 use sp_std::{vec::Vec, convert::TryInto};
 use sp_runtime::{
 	transaction_validity::{
@@ -21,12 +19,16 @@ pub use weights::WeightInfo;
 
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
+#[cfg(feature = "std")]
+use frame_support::traits::GenesisBuild;
 
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 pub mod weights;
+
+pub use pallet::*;
 
 #[derive(Encode, Decode, Clone, RuntimeDebug, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -48,80 +50,39 @@ impl Kitty {
 	}
 }
 
+type KittyIndexOf<T> = <T as orml_nft::Config>::TokenId;
+
+#[frame_support::pallet]
+pub mod pallet {
+	use frame_support::pallet_prelude::*;
+	use frame_system::pallet_prelude::*;
+	use super::*;
+
+	type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
+
+	#[pallet::config]
+	#[pallet::disable_frame_system_supertrait_check]
 pub trait Config: orml_nft::Config<TokenData = Kitty, ClassData = ()> + SendTransactionTypes<Call<Self>> {
-	type Event: From<Event<Self>> + Into<<Self as frame_system::Config>::Event>;
 	type Randomness: Randomness<Self::Hash>;
 	type Currency: Currency<Self::AccountId>;
 	type WeightInfo: WeightInfo;
+
+		#[pallet::constant]
 	type DefaultDifficulty: Get<u32>;
-}
 
-type KittyIndexOf<T> = <T as orml_nft::Config>::TokenId;
-type BalanceOf<T> = <<T as Config>::Currency as Currency<<T as frame_system::Config>::AccountId>>::Balance;
-
-decl_storage! {
-	trait Store for Module<T: Config> as Kitties {
-		/// Get kitty price. None means not for sale.
-		pub KittyPrices get(fn kitty_prices): map hasher(blake2_128_concat) KittyIndexOf<T> => Option<BalanceOf<T>>;
-		/// The class id for orml_nft
-		pub ClassId get(fn class_id): T::ClassId;
-		/// Nonce for auto breed to prevent replay attack
-		pub AutoBreedNonce get(fn auto_breed_nonce): u32;
-		/// Difficulty multiplier which goes up the more kitty the account owns
-		pub KittyDifficultyMultiplier get(fn kitty_difficulty_multiplier): map hasher(blake2_128_concat) KittyIndexOf<T> => u32;
+		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
-	add_extra_genesis {
-		build(|_config| {
-			// create a NFT class
-			let class_id = NftModule::<T>::create_class(&Default::default(), Vec::new(), ()).expect("Cannot fail or invalid chain spec");
-			ClassId::<T>::put(class_id);
-		})
-	}
-}
 
-decl_event! {
-	pub enum Event<T> where
-		<T as frame_system::Config>::AccountId,
-		KittyIndex = KittyIndexOf<T>,
-		Balance = BalanceOf<T>,
-	{
-		/// A kitty is created. \[owner, kitty_id, kitty\]
-		KittyCreated(AccountId, KittyIndex, Kitty),
-		/// A new kitten is bred. \[owner, kitty_id, kitty\]
-		KittyBred(AccountId, KittyIndex, Kitty),
-		/// A kitty is transferred. \[from, to, kitty_id\]
-		KittyTransferred(AccountId, AccountId, KittyIndex),
-		/// The price for a kitty is updated. \[owner, kitty_id, price\]
-		KittyPriceUpdated(AccountId, KittyIndex, Option<Balance>),
-		/// A kitty is sold. \[old_owner, new_owner, kitty_id, price\]
-		KittySold(AccountId, AccountId, KittyIndex, Balance),
-	}
-}
+	#[pallet::pallet]
+	#[pallet::generate_store(pub(super) trait Store)]
+	pub struct Pallet<T>(_);
 
-decl_error! {
-	pub enum Error for Module<T: Config> {
-		InvalidKittyId,
-		SameGender,
-		NotOwner,
-		NotForSale,
-		PriceTooLow,
-		BuyFromSelf,
-		KittyDifficultyOverflow,
-	}
-}
-
-decl_module! {
-	pub struct Module<T: Config> for enum Call where origin: T::Origin {
-		type Error = Error<T>;
-
-		/// Default difficulty for auto breed
-		const DefaultDifficulty: u32 = T::DefaultDifficulty::get();
-
-		fn deposit_event() = default;
+	#[pallet::call]
+	impl<T: Config> Pallet<T> {
 
 		/// Create a new kitty
-		#[weight = T::WeightInfo::create()]
-		pub fn create(origin) {
+		#[pallet::weight(T::WeightInfo::create())]
+		pub(super) fn create(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 			
 			let dna = Self::random_value(&sender);
@@ -131,23 +92,27 @@ decl_module! {
 			let kitty_id = NftModule::<T>::mint(&sender, Self::class_id(), Vec::new(), kitty.clone())?;
 
 			// Emit event
-			Self::deposit_event(RawEvent::KittyCreated(sender, kitty_id, kitty));
+			Self::deposit_event(crate::Event::KittyCreated(sender, kitty_id, kitty));
+
+			Ok(().into())
 		}
 
 		/// Breed kitties
-		#[weight = T::WeightInfo::breed()]
-		pub fn breed(origin, kitty_id_1: KittyIndexOf<T>, kitty_id_2: KittyIndexOf<T>) {
+		#[pallet::weight(T::WeightInfo::breed())]
+		pub(super) fn breed(origin: OriginFor<T>, kitty_id_1: KittyIndexOf<T>, kitty_id_2: KittyIndexOf<T>) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
 			let kitty1 = Self::kitties(&sender, kitty_id_1).ok_or(Error::<T>::InvalidKittyId)?;
 			let kitty2 = Self::kitties(&sender, kitty_id_2).ok_or(Error::<T>::InvalidKittyId)?;
 
 			Self::do_breed(sender, kitty1, kitty2)?;
+
+			Ok(().into())
 		}
 
 		/// Transfer a kitty to new owner
-		#[weight = T::WeightInfo::transfer()]
-		pub fn transfer(origin, to: T::AccountId, kitty_id: KittyIndexOf<T>) {
+		#[pallet::weight(T::WeightInfo::transfer())]
+		pub fn transfer(origin: OriginFor<T>, to: T::AccountId, kitty_id: KittyIndexOf<T>) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
 			NftModule::<T>::transfer(&sender, &to, (Self::class_id(), kitty_id))?;
@@ -155,26 +120,30 @@ decl_module! {
 			if sender != to {
 				KittyPrices::<T>::remove(kitty_id);
 
-				Self::deposit_event(RawEvent::KittyTransferred(sender, to, kitty_id));
+				Self::deposit_event(Event::KittyTransferred(sender, to, kitty_id));
 			}
+
+			Ok(().into())
 		}
 
 		/// Set a price for a kitty for sale
 		/// None to delist the kitty
-		#[weight = T::WeightInfo::set_price()]
-		pub fn set_price(origin, kitty_id: KittyIndexOf<T>, new_price: Option<BalanceOf<T>>) {
+		#[pallet::weight(T::WeightInfo::set_price())]
+		pub fn set_price(origin: OriginFor<T>, kitty_id: KittyIndexOf<T>, new_price: Option<BalanceOf<T>>) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
 			ensure!(orml_nft::TokensByOwner::<T>::contains_key(&sender, (Self::class_id(), kitty_id)), Error::<T>::NotOwner);
 
 			KittyPrices::<T>::mutate_exists(kitty_id, |price| *price = new_price);
 
-			Self::deposit_event(RawEvent::KittyPriceUpdated(sender, kitty_id, new_price));
+			Self::deposit_event(Event::KittyPriceUpdated(sender, kitty_id, new_price));
+
+			Ok(().into())
 		}
 
 		/// Buy a kitty
-		#[weight = T::WeightInfo::buy()]
-		pub fn buy(origin, owner: T::AccountId, kitty_id: KittyIndexOf<T>, max_price: BalanceOf<T>) {
+		#[pallet::weight(T::WeightInfo::buy())]
+		pub fn buy(origin: OriginFor<T>, owner: T::AccountId, kitty_id: KittyIndexOf<T>, max_price: BalanceOf<T>) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
 			ensure!(sender != owner, Error::<T>::BuyFromSelf);
@@ -188,15 +157,17 @@ decl_module! {
 					NftModule::<T>::transfer(&owner, &sender, (Self::class_id(), kitty_id))?;
 					T::Currency::transfer(&sender, &owner, price, ExistenceRequirement::KeepAlive)?;
 
-					Self::deposit_event(RawEvent::KittySold(owner, sender, kitty_id, price));
+					Self::deposit_event(Event::KittySold(owner, sender, kitty_id, price));
 
 					Ok(())
 				})
 			})?;
+
+			Ok(().into())
 		}
 
-		#[weight = 1000]
-		pub fn auto_breed(origin, kitty_id_1: KittyIndexOf<T>, kitty_id_2: KittyIndexOf<T>, _nonce: u32, _solution: u128) {
+		#[pallet::weight(1000)]
+		pub fn auto_breed(origin: OriginFor<T>, kitty_id_1: KittyIndexOf<T>, kitty_id_2: KittyIndexOf<T>, _nonce: u32, _solution: u128) -> DispatchResultWithPostInfo {
 			ensure_none(origin)?;
 
 			ensure!(Self::kitty_difficulty_multiplier(kitty_id_1) < u32::MAX, Error::<T>::KittyDifficultyOverflow);
@@ -211,11 +182,75 @@ decl_module! {
 			// default value is 0, so it starts at 0
 			KittyDifficultyMultiplier::<T>::mutate(kitty_id_1, |multiplier| *multiplier = multiplier.saturating_add(1));
 			KittyDifficultyMultiplier::<T>::mutate(kitty_id_2, |multiplier| *multiplier = multiplier.saturating_add(1));
+
+			Ok(().into())
+		}
 		}
 
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(_now: T::BlockNumber) {
 			let _ = Self::run_offchain_worker();
 		}
+	}
+
+	#[pallet::storage]
+	#[pallet::getter(fn kitty_prices)]
+	/// Get kitty price.
+	pub type KittyPrices<T: Config> = StorageMap<_, Blake2_128Concat, KittyIndexOf<T>, BalanceOf<T>, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn class_id)]
+	/// The class id for orml_nft
+	pub type ClassId<T: Config> = StorageValue<_, T::ClassId, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn auto_breed_nonce)]
+	/// Nonce for auto breed to prevent replay attack
+	pub type AutoBreedNonce<T: Config> = StorageValue<_, u32, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn kitty_difficulty_multiplier)]
+	/// Difficulty multiplier which goes up the more kitty the account owns
+	pub type KittyDifficultyMultiplier<T: Config> = StorageMap<_, Blake2_128Concat, KittyIndexOf<T> ,u32, ValueQuery>;
+
+	#[pallet::genesis_config]
+	#[derive(Default)]
+	pub struct GenesisConfig {}
+
+	#[pallet::genesis_build]
+	impl<T: Config> GenesisBuild<T> for GenesisConfig {
+		fn build(&self) {
+			let class_id = NftModule::<T>::create_class(&Default::default(), Vec::new(), ()).expect("Cannot fail or invalid chain spec");
+			ClassId::<T>::put(class_id);
+		}
+	}
+
+	#[pallet::event]
+	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	#[pallet::metadata(T::AccountId = "AccountId")]
+	pub enum Event<T: Config> {
+		/// A kitty is created. \[owner, kitty_id, kitty\]
+		KittyCreated(T::AccountId, KittyIndexOf<T>, Kitty),
+		/// A new kitten is bred. \[owner, kitty_id, kitty\]
+		KittyBred(T::AccountId, KittyIndexOf<T>, Kitty),
+		/// A kitty is transferred. \[from, to, kitty_id\]
+		KittyTransferred(T::AccountId, T::AccountId, KittyIndexOf<T>),
+		/// The price for a kitty is updated. \[owner, kitty_id, price\]
+		KittyPriceUpdated(T::AccountId, KittyIndexOf<T>, Option<BalanceOf<T>>),
+		/// A kitty is sold. \[old_owner, new_owner, kitty_id, price\]
+		KittySold(T::AccountId, T::AccountId, KittyIndexOf<T>, BalanceOf<T>),
+	}
+
+	#[pallet::error]
+	pub enum Error<T> {
+		InvalidKittyId,
+		SameGender,
+		NotOwner,
+		NotForSale,
+		PriceTooLow,
+		BuyFromSelf,
+		KittyDifficultyOverflow,
 	}
 }
 
@@ -223,7 +258,7 @@ fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
 	(!selector & dna1) | (selector & dna2)
 }
 
-impl<T: Config> Module<T> {
+impl<T: Config> Pallet<T> {
 	fn kitties(owner: &T::AccountId, kitty_id: KittyIndexOf<T>) -> Option<Kitty> {
 		NftModule::<T>::tokens(Self::class_id(), kitty_id).and_then(|x| {
 			if x.owner == *owner {
@@ -264,7 +299,7 @@ impl<T: Config> Module<T> {
 		let new_kitty = Kitty(new_dna);
 		let kitty_id = NftModule::<T>::mint(&owner, Self::class_id(), Vec::new(), new_kitty.clone())?;
 
-		Self::deposit_event(RawEvent::KittyBred(owner, kitty_id, new_kitty));
+		Self::deposit_event(Event::KittyBred(owner, kitty_id, new_kitty));
 
 		Ok(())
 	}
@@ -338,7 +373,7 @@ impl<T: Config> frame_support::unsigned::ValidateUnsigned for Module<T> {
 						return InvalidTransaction::BadProof.into();
 					}
 
-					AutoBreedNonce::mutate(|nonce| *nonce = nonce.saturating_add(1));
+					AutoBreedNonce::<T>::mutate(|nonce| *nonce = nonce.saturating_add(1));
 
 					ValidTransaction::with_tag_prefix("kitties")
 						.longevity(64_u64)
@@ -350,5 +385,25 @@ impl<T: Config> frame_support::unsigned::ValidateUnsigned for Module<T> {
 			},
 			_ => InvalidTransaction::Call.into(),
 		}
+	}
+}
+
+#[cfg(feature = "std")]
+impl GenesisConfig {
+	/// Direct implementation of `GenesisBuild::build_storage`.
+	///
+	/// Kept in order not to break dependency.
+	pub fn build_storage<T: Config>(&self) -> Result<sp_runtime::Storage, String> {
+		<Self as GenesisBuild<T>>::build_storage(self)
+	}
+
+	/// Direct implementation of `GenesisBuild::assimilate_storage`.
+	///
+	/// Kept in order not to break dependency.
+	pub fn assimilate_storage<T: Config>(
+		&self,
+		storage: &mut sp_runtime::Storage
+	) -> Result<(), String> {
+		<Self as GenesisBuild<T>>::assimilate_storage(self, storage)
 	}
 }
